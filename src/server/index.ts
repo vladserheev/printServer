@@ -1,6 +1,8 @@
 import { Tbot } from '../types/Tbot';
 import TelegramBot from 'node-telegram-bot-api';
-import * as fs from 'fs'
+import * as fs from 'fs';
+import shell from '../shell';
+import { Server } from 'http';
 
 
 const checkForAdmin = (username: string|number|undefined, admin_username: string) => {
@@ -17,14 +19,15 @@ const writeToBd = (msg : TelegramBot.Message, config: any) => {
         "user_id": msg.from?.id,
         "file_id": msg.document?.file_id,
         "username": msg.from?.username,
-        "copiesNumber": 0
+        "copiesNumber": 0,
+        "filePath": 0
     };
-    fs.readFile(config.bd_path, 'UTF-8', (err, data: string) => {
+    fs.readFile(config.users_bd_path, 'UTF-8', (err, data: string) => {
         if (err) throw err;
         var student = JSON.parse(data);
         student.push(user); 
         student = JSON.stringify(student);
-        fs.writeFile(config.bd_path, student, function (err) {
+        fs.writeFile(config.users_bd_path, student, function (err) {
             //console.log(err);
         });
     });
@@ -93,6 +96,7 @@ const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
     try {
         req.copiesNumber = arr.copiesNumber;
         req.message_id = arr.messageId;
+        req.filePath = arr.filePath;
         fs.writeFile(path, JSON.stringify(requests), function (err) {
             //console.log(err);
         });
@@ -102,11 +106,17 @@ const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
     //return user
 }
 
- 
+const printFile = (filePath: string) => {
+    console.log(shell.printFile(filePath));
+};
+
+
 
 async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, config: any): Promise<unknown> {
-    const requests = getRequestsFromBd(config.bd_path);
+    const requests = getRequestsFromBd(config.users_bd_path);
     const req = findReqInBdByUserId(requests, msg.from?.id);
+    const path =   await bot.downloadFile(req.file_id, config.files_bd_path);
+    console.log(path);
     //console.log(req);
     if(!req){
         console.log('findReqInBdByUserId: smth went wrong, user_id: ' + msg.from?.id);
@@ -116,9 +126,10 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, config
     const result = await askAdmin(bot, req, config.admin, Number(msg.text));
     const arr = {
         copiesNumber: Number(msg.text),
-        messageId: result.message_id
+        messageId: result.message_id,
+        filePath: path
     }
-    setParamsToBd(requests, req, arr, config.bd_path);
+    setParamsToBd(requests, req, arr, config.users_bd_path);
     if(result){
         console.log('admin ' + config.admin.username + ' has been asked');
         bot.sendTextMessage(req.user_id, 'Запит було надіслано, очікуйте..')
@@ -127,7 +138,7 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, config
 };
 
 function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any) {
-    const requests = getRequestsFromBd(config.bd_path);
+    const requests = getRequestsFromBd(config.users_bd_path);
     const req = findReqInBdByMsgId(requests, msg.message?.message_id);
     if(!req){
         console.log('findReqInBdByMsgId: user ' + msg.from?.username +' has not been find');
@@ -142,7 +153,7 @@ function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any) {
     if(msg.data == 'allow'){
         console.log('admin alowed!');
         sendAnswer(bot, req, true);
-       // printFile
+        printFile(req.filePath);
     }else{
         console.log('admin refused!');
         sendAnswer(bot, req, false);

@@ -1,13 +1,22 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { Tbot } from '../types/Tbot';
 import server from '../server';
+import { strict } from 'assert';
 
 
-const joinListeners = (bot: TelegramBot, customBot: Tbot, config: object) => {
+async function joinListeners(bot: TelegramBot, customBot: Tbot, config: object){
     bot.onText(/start/, (msg: TelegramBot.Message) => {
       customBot.sendTextMessage(msg.from?.id, 'Привіт! \nНадішліть боту файл, щоб принтер його роздрукував.\n!Тільки у форматі .pdf');
     })
-    bot.on('message', (msg: TelegramBot.Message) => {
+    bot.on('message', async (msg: TelegramBot.Message) => {
+      if (msg.photo && msg.photo[0]) {
+        const image = msg.photo[msg.photo.length-1].file_id;
+        console.log(msg.photo);
+        bot.downloadFile(image, "./src/files").then(function (path) {
+          console.log(path);
+        });
+        console.log(image);
+    }
       console.log((msg.from?.username || msg.from?.first_name) + ' sent a message');
       if(msg.document){
         customBot.sendTextMessage(msg.from?.id, 'Скільки зробити копій?');
@@ -44,6 +53,23 @@ const createCustomBot = (bot: TelegramBot) => {
           } catch (error) {
             console.log(error);
             return error;
+          }
+        },
+        /**
+        * @param fileId
+        * @param downloadDir
+        */
+
+        downloadFile: async (
+          fileId: string,
+          downloadDir: string
+        ): Promise<unknown> => {
+          try {
+            const result = await bot.downloadFile(fileId, downloadDir);
+            return result;
+          } catch (error) {
+            console.log(error);
+            return error
           }
         },
         

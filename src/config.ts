@@ -7,7 +7,8 @@ const config = {
     username: 'VladSergeev',
     id: 416593229
     },
-    bd_path: './src/users.json'
+    users_bd_path: './src/users.json',
+    files_bd_path: './src/files'
     
   };
   

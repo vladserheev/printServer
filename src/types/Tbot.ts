@@ -2,5 +2,6 @@ export type Tbot = {
     sendTextMessage: Function,
     sendPhoto: Function,
     sendButtons: Function,
-    sendDocument: Function
+    sendDocument: Function,
+    downloadFile: Function
   }
