@@ -85,7 +85,11 @@ const findReqInBdByMsgId = (requests: any, id: number | undefined) => {
 }
 
 const findReqInBdByUserId = (requests: any, id: number | undefined) => {
+    try{
     return requests.find((x:any) => x.user_id === id && x.copiesNumber === 0);
+    }catch(error){
+        console.log(error);
+    }
 }
  
 // const changeReqStatus = (req: Object, status: boolean) => {
@@ -106,8 +110,9 @@ const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
     //return user
 }
 
-const printFile = (filePath: string) => {
-    console.log(shell.printFile(filePath));
+const printFile = (filePath: string, copiesNum: number) => {
+    const resuslt = shell.printFile(filePath, copiesNum);
+    console.log(resuslt);
 };
 
 
@@ -115,9 +120,12 @@ const printFile = (filePath: string) => {
 async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, config: any): Promise<unknown> {
     const requests = getRequestsFromBd(config.users_bd_path);
     const req = findReqInBdByUserId(requests, msg.from?.id);
-    const path =   await bot.downloadFile(req.file_id, config.files_bd_path);
-    console.log(path);
-    //console.log(req);
+    console.log(req.username + " set the copies' number");
+    const path = await bot.downloadFile(req.file_id, config.files_bd_path);
+    if(!path){
+        console.log('failed to download the file');
+        return false
+    }
     if(!req){
         console.log('findReqInBdByUserId: smth went wrong, user_id: ' + msg.from?.id);
         return false
@@ -153,7 +161,7 @@ function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any) {
     if(msg.data == 'allow'){
         console.log('admin alowed!');
         sendAnswer(bot, req, true);
-        printFile(req.filePath);
+        printFile(req.filePath, req.copiesNumber);
     }else{
         console.log('admin refused!');
         sendAnswer(bot, req, false);

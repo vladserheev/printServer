@@ -9,16 +9,10 @@ async function joinListeners(bot: TelegramBot, customBot: Tbot, config: object){
       customBot.sendTextMessage(msg.from?.id, 'Привіт! \nНадішліть боту файл, щоб принтер його роздрукував.\n!Тільки у форматі .pdf');
     })
     bot.on('message', async (msg: TelegramBot.Message) => {
-      if (msg.photo && msg.photo[0]) {
-        const image = msg.photo[msg.photo.length-1].file_id;
-        console.log(msg.photo);
-        bot.downloadFile(image, "./src/files").then(function (path) {
-          console.log(path);
-        });
-        console.log(image);
-    }
-      console.log((msg.from?.username || msg.from?.first_name) + ' sent a message');
+      //console.log((msg.from?.username || msg.from?.first_name) + ' sent a message');
       if(msg.document){
+        console.log(msg.from);
+        console.log((msg.from?.username) + ' sent a message');
         customBot.sendTextMessage(msg.from?.id, 'Скільки зробити копій?');
         server.writeToBd(msg, config);
       }else{
@@ -69,7 +63,7 @@ const createCustomBot = (bot: TelegramBot) => {
             return result;
           } catch (error) {
             console.log(error);
-            return error
+            return false
           }
         },
         
