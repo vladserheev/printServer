@@ -1,5 +1,5 @@
-src/files/
-
+# src/files/
+# users.json
 # Logs
 logs
 *.log
