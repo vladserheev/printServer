@@ -120,7 +120,7 @@ const printFile = (filePath: string, copiesNum: number) => {
 async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, config: any): Promise<unknown> {
     const requests = getRequestsFromBd(config.users_bd_path);
     const req = findReqInBdByUserId(requests, msg.from?.id);
-    console.log(req.username + " set the copies' number");
+    console.log(req.username + " set the copies' number: " + msg.text);
     const path = await bot.downloadFile(req.file_id, config.files_bd_path);
     if(!path){
         console.log('failed to download the file');
