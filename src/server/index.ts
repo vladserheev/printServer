@@ -40,7 +40,8 @@ const writeToBd = async (msg : TelegramBot.Message, config: any) => {
     };
         //const data = fs.readFileSync(config.users_bd_path);
         //var requests = getRequestsFromBd(config.users_bd_path);
-        fs.readFile(config.users_bd_path, 'utf8', function(err, contents) {
+        var contents = fs.readFileSync(config.users_bd_path,{encoding:'utf8', flag:'r'});
+//
             console.log(contents);
             // fs.writeFile(config.users_bd_path, JSON.stringify(JSON.parse(contents).push(req)), function (err) {
             //     console.log('writted to bd');
@@ -49,10 +50,8 @@ const writeToBd = async (msg : TelegramBot.Message, config: any) => {
             content.push(req);
             contents = JSON.stringify(content);
             //fs.writeFileSync(config.users_bd_path, content);
-            fs.writeFile(config.users_bd_path, contents, function (err) {
-                console.log('writted to bd');
-            });
-        });
+            fs.writeFileSync(config.users_bd_path, contents);
+        // });
         // requests.push(req); 
         // requests = JSON.stringify(requests);
        
