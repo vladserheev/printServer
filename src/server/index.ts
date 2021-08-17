@@ -2,8 +2,7 @@ import { Tbot } from '../types/Tbot';
 import TelegramBot from 'node-telegram-bot-api';
 import * as fs from 'fs';
 import shell from '../shell';
-import { Server } from 'http';
-
+import { request } from 'express';
 
 const checkForAdmin = (username: string|number|undefined, admin_username: string) => {
     if(admin_username == username){
@@ -13,28 +12,71 @@ const checkForAdmin = (username: string|number|undefined, admin_username: string
     }
 };
 
-const writeToBd = (msg : TelegramBot.Message, config: any) => {
-    const user = {
-        "message_id": 0,
+
+
+//----------- work with bd ------------//
+
+const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
+    try {
+        req.copiesNumber = arr.copiesNumber;
+        req.button_id = arr.button_id;
+        req.filePath = arr.filePath;
+        fs.writeFile(path, JSON.stringify(requests), function (err) {
+            //console.log(err);
+        });
+    } catch (error) {
+        console.log(error);
+    }
+    //return user
+}
+
+const writeToBd = async (msg : TelegramBot.Message, config: any) => {
+    const req = {
         "user_id": msg.from?.id,
         "file_id": msg.document?.file_id,
         "username": msg.from?.username,
         "copiesNumber": 0,
         "filePath": 0
     };
-    fs.readFile(config.users_bd_path, 'UTF-8', (err, data: string) => {
-        if (err) throw err;
-        var student = JSON.parse(data);
-        student.push(user); 
-        student = JSON.stringify(student);
-        fs.writeFile(config.users_bd_path, student, function (err) {
-            //console.log(err);
+        //const data = fs.readFileSync(config.users_bd_path);
+        //var requests = getRequestsFromBd(config.users_bd_path);
+        fs.readFile(config.users_bd_path, 'utf8', function(err, contents) {
+            console.log(contents);
+            // fs.writeFile(config.users_bd_path, JSON.stringify(JSON.parse(contents).push(req)), function (err) {
+            //     console.log('writted to bd');
+            // });
+            var content = JSON.parse(contents);
+            content.push(req);
+            contents = JSON.stringify(content);
+            //fs.writeFileSync(config.users_bd_path, content);
+            fs.writeFile(config.users_bd_path, contents, function (err) {
+                console.log('writted to bd');
+            });
         });
-    });
+        // requests.push(req); 
+        // requests = JSON.stringify(requests);
+       
 }
 
+const getRequestsFromBd = (path: string) => {
+    return JSON.parse(fs.readFileSync(path, 'utf8'));
+    //return requests
+}
+
+const checkIfSomeReqWithNoCopiesNum = (userId: number | undefined, path: string) => {
+    const requests = getRequestsFromBd(path);
+    if(requests.filter((x:any) => x.user_id === userId && x.copiesNumber === 0).length > 1){
+        console.log('checkIfSomeReqWithNoCopiesNum: there are few elements in bd with zero nums of copies');
+        return true
+    };
+    return false;
+}
+
+
+
+//----------- telegram API -----------//
+
 const askAdmin = async (bot: Tbot, req: any, admin: any, copiesNumber: number) => {
-    ///console.log(msg);
     try {
         const username = req.username;
         const caption = {"caption": username + ' хоче роздркувати ці файли \nКількість копій: ' + copiesNumber};
@@ -52,7 +94,8 @@ const askAdmin = async (bot: Tbot, req: any, admin: any, copiesNumber: number) =
                 }]
                 ]
             }
-        };    
+        };
+
         await bot.sendDocument(admin.id, document_file_id, caption);
         return await bot.sendButtons(admin.id, 'Дозволити?', opts);
     } catch (error) {
@@ -60,7 +103,7 @@ const askAdmin = async (bot: Tbot, req: any, admin: any, copiesNumber: number) =
     }
 }
 
-const sendAnswer = (bot: Tbot, req:any, result: boolean) => {
+const sendAnswer = async (bot: Tbot, req:any, result: boolean) => {
     try {
         var text: string;
         if(result){
@@ -75,79 +118,75 @@ const sendAnswer = (bot: Tbot, req:any, result: boolean) => {
     }
 }
 
-const getRequestsFromBd = (path: string) => {
-    return JSON.parse(fs.readFileSync(path, 'utf8'));
-    //return requests
+
+const findReqInBdByBtnId = (requests: any, id: number | undefined) => {
+    return requests.find((x:any) => x.button_id === id);
 }
 
-const findReqInBdByMsgId = (requests: any, id: number | undefined) => {
-    return requests.find((x:any) => x.message_id === id);
-}
-
-const findReqInBdByUserId = (requests: any, id: number | undefined) => {
+const findReqInBdByFileId = (requests: any, id: number | undefined) => {
     try{
-    return requests.find((x:any) => x.user_id === id && x.copiesNumber === 0);
+        console.log('hello');
+        return requests.find((x:any) => x.file_id === id && x.copiesNumber === 0);
     }catch(error){
         console.log(error);
     }
 }
  
-// const changeReqStatus = (req: Object, status: boolean) => {
-
-// }
-
-const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
-    try {
-        req.copiesNumber = arr.copiesNumber;
-        req.message_id = arr.messageId;
-        req.filePath = arr.filePath;
-        fs.writeFile(path, JSON.stringify(requests), function (err) {
-            //console.log(err);
-        });
-    } catch (error) {
-        console.log(error);
-    }
-    //return user
-}
-
 const printFile = (filePath: string, copiesNum: number) => {
     const resuslt = shell.printFile(filePath, copiesNum);
-    console.log(resuslt);
+    //console.log(resuslt);
 };
 
+const checkUserInPrimaryList = (username: string, userslist: string[]) => {
+    return userslist.some((x:any) => x === username)
+};
 
-
-async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, config: any): Promise<unknown> {
+// when user set copies' number
+async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, element:any ,config: any): Promise<unknown> {
+   // console.log(element);
     const requests = getRequestsFromBd(config.users_bd_path);
-    const req = findReqInBdByUserId(requests, msg.from?.id);
-    console.log(req.username + " set the copies' number: " + msg.text);
+    const req = findReqInBdByFileId(requests, element.file_id);
+    console.log(req);
+    console.log(requests);
+    if(!req){
+        console.log('findReqInBdByFileId: smth went wrong, user_id: ' + msg.from?.id);
+        return false
+    }
     const path = await bot.downloadFile(req.file_id, config.files_bd_path);
     if(!path){
         console.log('failed to download the file');
         return false
     }
-    if(!req){
-        console.log('findReqInBdByUserId: smth went wrong, user_id: ' + msg.from?.id);
-        return false
-    }
-
-    const result = await askAdmin(bot, req, config.admin, Number(msg.text));
+    console.log(req.username + " set the copies' number: " + msg.text);
     const arr = {
         copiesNumber: Number(msg.text),
-        messageId: result.message_id,
-        filePath: path
+        filePath: path,
+        button_id: 0
+    }
+    //setParamsToBd(requests, req, arr, config.users_bd_path);
+
+    if(checkUserInPrimaryList(req.username, config.primaryUsersList)){  // if user already in primaryList he musn't wait for allowation
+        console.log(req.username + ' is in primary list');
+        await sendAnswer(bot, req, true);
+        printFile(arr.filePath, arr.copiesNumber); // bot can start printing
+    }else{
+        const buttonId = await askAdmin(bot, req, config.admin, arr.copiesNumber);
+        if(buttonId){
+            console.log('admin ' + config.admin.username + ' has been asked');
+            await bot.sendTextMessage(req.user_id, 'Запит було надіслано, очікуйте..');
+            arr.button_id = buttonId.message_id;
+        }
     }
     setParamsToBd(requests, req, arr, config.users_bd_path);
-    if(result){
-        console.log('admin ' + config.admin.username + ' has been asked');
-        bot.sendTextMessage(req.user_id, 'Запит було надіслано, очікуйте..')
-    }
+    console.log('prepearingForPrinting: finished');
     return true
 };
 
-function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any) {
+
+//  when admin press the button
+async function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any): Promise<unknown> {
     const requests = getRequestsFromBd(config.users_bd_path);
-    const req = findReqInBdByMsgId(requests, msg.message?.message_id);
+    const req = findReqInBdByBtnId(requests, msg.message?.message_id);
     if(!req){
         console.log('findReqInBdByMsgId: user ' + msg.from?.username +' has not been find');
         return false
@@ -160,16 +199,18 @@ function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any) {
 
     if(msg.data == 'allow'){
         console.log('admin alowed!');
-        sendAnswer(bot, req, true);
+        await sendAnswer(bot, req, true);
         printFile(req.filePath, req.copiesNumber);
     }else{
         console.log('admin refused!');
-        sendAnswer(bot, req, false);
+        await sendAnswer(bot, req, false);
     }
+    return false
 }
 
 export default {
     queryProccess,
     writeToBd,
-    prepearingForPrinting
+    prepearingForPrinting,
+    checkIfSomeReqWithNoCopiesNum
   };

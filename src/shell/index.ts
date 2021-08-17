@@ -1,5 +1,6 @@
 const { exec } = require("child_process");
 const printFile = (filePath: string, copiesNum: number) => {
+    console.log('printing....');
     if(copiesNum == 1){
         var command = 'lp ' + filePath;
     }else{

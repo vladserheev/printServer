@@ -8,8 +8,8 @@ const config = {
     id: 416593229
     },
     users_bd_path: './src/users.json',
-    files_bd_path: './src/files'
-    
+    files_bd_path: './src/files',
+    primaryUsersList: ['VladSergeeev']
   };
   
   export default config;
