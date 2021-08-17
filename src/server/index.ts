@@ -2,7 +2,24 @@ import { Tbot } from '../types/Tbot';
 import TelegramBot from 'node-telegram-bot-api';
 import * as fs from 'fs';
 import shell from '../shell';
-import { request } from 'express';
+
+const checkValidFile = (file: any, config: any) => {
+    const fileType = file.file_name.split('.').pop();
+    console.log(config);
+    if(file.mime_type === config.valid_mime_types){
+        return true
+    }else if(config.valid_file_types.some((x:string) => x === fileType)){
+        return true
+    }
+    return false
+}
+
+const checkVslidNumber = (number: number) => {
+    if(number >= 20 || number < 1 || !Number.isInteger(number)){
+        return false
+    }
+    return true
+}
 
 const checkForAdmin = (username: string|number|undefined, admin_username: string) => {
     if(admin_username == username){
@@ -12,8 +29,6 @@ const checkForAdmin = (username: string|number|undefined, admin_username: string
     }
 };
 
-
-
 //----------- work with bd ------------//
 
 const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
@@ -22,7 +37,7 @@ const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
         req.button_id = arr.button_id;
         req.filePath = arr.filePath;
         fs.writeFile(path, JSON.stringify(requests), function (err) {
-            //console.log(err);
+            console.log('setParamsToBd: ' + req.username + ' was updated with new params');
         });
     } catch (error) {
         console.log(error);
@@ -38,40 +53,40 @@ const writeToBd = async (msg : TelegramBot.Message, config: any) => {
         "copiesNumber": 0,
         "filePath": 0
     };
-        //const data = fs.readFileSync(config.users_bd_path);
-        //var requests = getRequestsFromBd(config.users_bd_path);
-        var contents = fs.readFileSync(config.users_bd_path,{encoding:'utf8', flag:'r'});
-//
-            console.log(contents);
-            // fs.writeFile(config.users_bd_path, JSON.stringify(JSON.parse(contents).push(req)), function (err) {
-            //     console.log('writted to bd');
-            // });
-            var content = JSON.parse(contents);
-            content.push(req);
-            contents = JSON.stringify(content);
-            //fs.writeFileSync(config.users_bd_path, content);
-            fs.writeFileSync(config.users_bd_path, contents);
-        // });
-        // requests.push(req); 
-        // requests = JSON.stringify(requests);
-       
+    var contents = getRequestsFromBd(config.requests_bd_path);
+    contents.push(req);
+    contents = JSON.stringify(contents);
+    fs.writeFileSync(config.requests_bd_path, contents);
 }
 
 const getRequestsFromBd = (path: string) => {
-    return JSON.parse(fs.readFileSync(path, 'utf8'));
-    //return requests
+    return JSON.parse(fs.readFileSync(path, {encoding:'utf8', flag:'r'}));
 }
 
-const checkIfSomeReqWithNoCopiesNum = (userId: number | undefined, path: string) => {
-    const requests = getRequestsFromBd(path);
-    if(requests.filter((x:any) => x.user_id === userId && x.copiesNumber === 0).length > 1){
-        console.log('checkIfSomeReqWithNoCopiesNum: there are few elements in bd with zero nums of copies');
-        return true
-    };
-    return false;
+const removeItemFromBd = (requests: any, req: any, path: string) => {
+    const index = requests.indexOf(req);
+    console.log(index);
+    if (index > -1) {
+        requests.splice(index, 1);
+    }
+    fs.writeFile(path, JSON.stringify(requests), (err) => {
+        if(!err){
+            console.log('removeUserDataAfterPrinting: req deleted successfully');
+        }
+    });
 }
 
+const removeFile = (filePath: string) => {
+    fs.unlink(filePath, function(err){
+        if(err) return console.log(err);
+        console.log('removeUserDataAfterPrinting: file deleted successfully');
+   });  
+}
 
+const removeUserDataAfterPrinting = (requests: any, req: any, filePath:string, config: any) => {
+    removeItemFromBd(requests, req, config.requests_bd_path);
+    removeFile(filePath);
+}
 
 //----------- telegram API -----------//
 
@@ -119,12 +134,15 @@ const sendAnswer = async (bot: Tbot, req:any, result: boolean) => {
 
 
 const findReqInBdByBtnId = (requests: any, id: number | undefined) => {
-    return requests.find((x:any) => x.button_id === id);
+    try {
+        return requests.find((x:any) => x.button_id === id);
+    } catch (error) {
+        console.log(error);
+    }
 }
 
 const findReqInBdByFileId = (requests: any, id: number | undefined) => {
     try{
-        console.log('hello');
         return requests.find((x:any) => x.file_id === id && x.copiesNumber === 0);
     }catch(error){
         console.log(error);
@@ -133,7 +151,6 @@ const findReqInBdByFileId = (requests: any, id: number | undefined) => {
  
 const printFile = (filePath: string, copiesNum: number) => {
     const resuslt = shell.printFile(filePath, copiesNum);
-    //console.log(resuslt);
 };
 
 const checkUserInPrimaryList = (username: string, userslist: string[]) => {
@@ -142,11 +159,9 @@ const checkUserInPrimaryList = (username: string, userslist: string[]) => {
 
 // when user set copies' number
 async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, element:any ,config: any): Promise<unknown> {
-   // console.log(element);
-    const requests = getRequestsFromBd(config.users_bd_path);
+    const requests = getRequestsFromBd(config.requests_bd_path);
     const req = findReqInBdByFileId(requests, element.file_id);
-    console.log(req);
-    console.log(requests);
+
     if(!req){
         console.log('findReqInBdByFileId: smth went wrong, user_id: ' + msg.from?.id);
         return false
@@ -162,9 +177,8 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, elemen
         filePath: path,
         button_id: 0
     }
-    //setParamsToBd(requests, req, arr, config.users_bd_path);
 
-    if(checkUserInPrimaryList(req.username, config.primaryUsersList)){  // if user already in primaryList he musn't wait for allowation
+    if(checkUserInPrimaryList(req.username, config.primaryUsersList)){  // if user in primaryList he musn't wait for allowation
         console.log(req.username + ' is in primary list');
         await sendAnswer(bot, req, true);
         printFile(arr.filePath, arr.copiesNumber); // bot can start printing
@@ -173,10 +187,10 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, elemen
         if(buttonId){
             console.log('admin ' + config.admin.username + ' has been asked');
             await bot.sendTextMessage(req.user_id, 'Запит було надіслано, очікуйте..');
-            arr.button_id = buttonId.message_id;
+            arr.button_id = buttonId.message_id; // it helps connect user's file and the button that is sent to the admin
         }
     }
-    setParamsToBd(requests, req, arr, config.users_bd_path);
+    setParamsToBd(requests, req, arr, config.requests_bd_path);
     console.log('prepearingForPrinting: finished');
     return true
 };
@@ -184,7 +198,7 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, elemen
 
 //  when admin press the button
 async function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any): Promise<unknown> {
-    const requests = getRequestsFromBd(config.users_bd_path);
+    const requests = getRequestsFromBd(config.requests_bd_path);
     const req = findReqInBdByBtnId(requests, msg.message?.message_id);
     if(!req){
         console.log('findReqInBdByMsgId: user ' + msg.from?.username +' has not been find');
@@ -200,10 +214,12 @@ async function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: 
         console.log('admin alowed!');
         await sendAnswer(bot, req, true);
         printFile(req.filePath, req.copiesNumber);
+
     }else{
         console.log('admin refused!');
         await sendAnswer(bot, req, false);
     }
+    removeUserDataAfterPrinting(requests, req, req.filePath, config);
     return false
 }
 
@@ -211,5 +227,6 @@ export default {
     queryProccess,
     writeToBd,
     prepearingForPrinting,
-    checkIfSomeReqWithNoCopiesNum
+    checkVslidNumber,
+    checkValidFile
   };

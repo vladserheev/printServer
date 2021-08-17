@@ -1,15 +1,16 @@
 const config = {
-    /**
-     * Telegram bot token
-     */
-    telegram_token: '1900959094:AAEDdj-6yNkUBiYjbWGNQUute3vya5AbxiY',
+    telegram_token: '',
     'admin' : {
     username: 'VladSergeev',
     id: 416593229
     },
-    users_bd_path: './src/users.json',
+    requests_bd_path: './src/requests.json',
     files_bd_path: './src/files',
-    primaryUsersList: ['VladSergeeev']
+    primaryUsersList: ['VladSergeeev'],
+    "file" : {
+      valid_mime_types: 'application/pdf',
+      valid_file_types: ['txt', 'docx', 'xlsx', 'pdf']
+    }
   };
   
   export default config;

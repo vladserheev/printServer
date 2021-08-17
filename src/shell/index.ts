@@ -9,7 +9,7 @@ const printFile = (filePath: string, copiesNum: number) => {
 
     exec(command, (error:any, stdout:any, stderr:any) => {
         if (error) {
-            console.log(`error: ${error.message}`);
+            console.log(`error: ${error}`);
             return;
         }
         if (stderr) {

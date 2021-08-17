@@ -1,32 +1,33 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { Tbot } from '../types/Tbot';
 import server from '../server';
-let bd: any[] = [];
+
+let bd: any[] = []; // this bd for requests that have no copiesNum yet
 
 const askCopiesNumber = async (bot: Tbot, id: number | undefined, msgId: number | undefined) => {
-  //if(!server.checkIfSomeReqWithNoCopiesNum(id, config.users_bd_path)){ // return false if there is only one new request in bd from user
   if((bd[0]) && bd[0].user_id === id && bd[0].message_id === msgId){
     await bot.sendTextMessage(id, 'Скільки зробити копій?', {"reply_to_message_id": msgId});
   }
   return false
 }
 
-async function joinListeners(bot: TelegramBot, customBot: Tbot, config: object){
+async function joinListeners(bot: TelegramBot, customBot: Tbot, config: any){
     bot.onText(/start/, (msg: TelegramBot.Message) => {
-      customBot.sendTextMessage(msg.from?.id, 'Привіт! \nНадішліть боту файл, щоб принтер його роздрукував.\n!Тільки у форматі .pdf');
+      customBot.sendTextMessage(msg.from?.id, 'Привіт! \nНадішли боту файл(.docs, .pdf, .xlsx, .txt), щоб принтер його роздрукував');
     });
     bot.on('message', async (msg: TelegramBot.Message) => {
       if(msg.document){
+        if(!server.checkValidFile(msg.document, config.file)){
+          console.log('not valid file_type');
+          return false
+        }
         console.log(msg);
         console.log((msg.from?.username || msg.from?.last_name) + ' sent a document');
         await server.writeToBd(msg, config);
         const req = {
           "user_id": msg.from?.id,
           "message_id": msg.message_id,
-          "file_id": msg.document?.file_id,
-          "username": msg.from?.username,
-          "copiesNumber": 0,
-          "filePath": 0
+          "file_id": msg.document?.file_id
       };
         bd.push(req);
         await askCopiesNumber(customBot, msg.from?.id, msg.message_id);
@@ -39,12 +40,16 @@ async function joinListeners(bot: TelegramBot, customBot: Tbot, config: object){
     });
 
     bot.onText(/[0-9]+/, async (msg: TelegramBot.Message) => {
+      if(!server.checkVslidNumber(Number(msg.text))){
+        console.log('Not valid number');
+        customBot.sendTextMessage(msg.from?.id, 'Надішліть коректне число')
+        return false
+      }
       await server.prepearingForPrinting(customBot, msg, bd[0], config);
       bd.shift();
       if(bd[0]){
         await askCopiesNumber(customBot, msg.from?.id, bd[0].message_id);
       }
-      //server.prepearingForPrinting(customBot, msg, config);
     });
     return bot;
 }
