@@ -1,5 +1,5 @@
 const config = {
-    telegram_token: '1900959094:AAEDdj-6yNkUBiYjbWGNQUute3vya5AbxiY',
+    telegram_token: '',
     admin : {
     username: 'VladSergeev',
     id: 416593229
