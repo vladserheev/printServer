@@ -1,10 +1,10 @@
-import { Tbot } from '../types/Tbot';
 import TelegramBot from 'node-telegram-bot-api';
 import * as fs from 'fs';
 import shell from '../shell';
+import { Config, Tbot, Req, Valid_files_conf, Admin, Requests, AdditionalParams, NewRequest} from '../types';
 
-const checkValidFile = (file: any, config: any) => {
-    const fileType = file.file_name.split('.').pop();
+const checkValidFile = (file: TelegramBot.Document, config: Valid_files_conf): boolean => {
+    const fileType = file.file_name?.split('.').pop();
     console.log(config);
     if(file.mime_type === config.valid_mime_types){
         return true
@@ -14,14 +14,14 @@ const checkValidFile = (file: any, config: any) => {
     return false
 }
 
-const checkVslidNumber = (number: number) => {
+const checkVslidNumber = (number: number): boolean => {
     if(number >= 20 || number < 1 || !Number.isInteger(number)){
         return false
     }
     return true
 }
 
-const checkForAdmin = (username: string|number|undefined, admin_username: string) => {
+const checkForAdmin = (username: string|number|undefined, admin_username: string): boolean => {
     if(admin_username == username){
         return true
     }else{
@@ -31,7 +31,7 @@ const checkForAdmin = (username: string|number|undefined, admin_username: string
 
 //----------- work with bd ------------//
 
-const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
+const setParamsToBd = (requests: Requests, req: Req, arr: AdditionalParams, path: string) => {
     try {
         req.copiesNumber = arr.copiesNumber;
         req.button_id = arr.button_id;
@@ -45,25 +45,25 @@ const setParamsToBd = (requests: any, req: any, arr: any, path: string) => {
     //return user
 }
 
-const writeToBd = async (msg : TelegramBot.Message, config: any) => {
-    const req = {
+const writeToBd = async (msg : TelegramBot.Message, config: Config) => {
+    const req:Req = {
         "user_id": msg.from?.id,
         "file_id": msg.document?.file_id,
-        "username": msg.from?.username,
+        "username": msg.from?.username || '',
         "copiesNumber": 0,
-        "filePath": 0
+        "filePath": '',
+        "button_id": 0
     };
-    var contents = getRequestsFromBd(config.requests_bd_path);
-    contents.push(req);
-    contents = JSON.stringify(contents);
-    fs.writeFileSync(config.requests_bd_path, contents);
+    var requests = getRequestsFromBd(config.requests_bd_path);
+    requests.push(req);
+    fs.writeFileSync(config.requests_bd_path, JSON.stringify(requests));
 }
 
-const getRequestsFromBd = (path: string) => {
+const getRequestsFromBd = (path: string):Requests => {
     return JSON.parse(fs.readFileSync(path, {encoding:'utf8', flag:'r'}));
 }
 
-const removeItemFromBd = (requests: any, req: any, path: string) => {
+const removeItemFromBd = (requests: Requests, req: Req, path: string) => {
     const index = requests.indexOf(req);
     console.log(index);
     if (index > -1) {
@@ -83,14 +83,14 @@ const removeFile = (filePath: string) => {
    });  
 }
 
-const removeUserDataAfterPrinting = (requests: any, req: any, filePath:string, config: any) => {
+const removeUserDataAfterPrinting = (requests: Requests, req: Req, filePath:string, config: Config) => {
     removeItemFromBd(requests, req, config.requests_bd_path);
     removeFile(filePath);
 }
 
 //----------- telegram API -----------//
 
-const askAdmin = async (bot: Tbot, req: any, admin: any, copiesNumber: number) => {
+const askAdmin = async (bot: Tbot, req: Req, admin: Admin, copiesNumber: number): Promise<TelegramBot.Message> => {
     try {
         const username = req.username;
         const caption = {"caption": username + ' хоче роздркувати ці файли \nКількість копій: ' + copiesNumber};
@@ -113,11 +113,13 @@ const askAdmin = async (bot: Tbot, req: any, admin: any, copiesNumber: number) =
         await bot.sendDocument(admin.id, document_file_id, caption);
         return await bot.sendButtons(admin.id, 'Дозволити?', opts);
     } catch (error) {
+        return error;
+        
         console.log(error)
     }
 }
 
-const sendAnswer = async (bot: Tbot, req:any, result: boolean) => {
+const sendAnswer = async (bot: Tbot, req:Req, result: boolean) => {
     try {
         var text: string;
         if(result){
@@ -133,17 +135,18 @@ const sendAnswer = async (bot: Tbot, req:any, result: boolean) => {
 }
 
 
-const findReqInBdByBtnId = (requests: any, id: number | undefined) => {
+const findReqInBdByBtnId = (requests: Requests, id: number | undefined):Req | undefined => {
     try {
-        return requests.find((x:any) => x.button_id === id);
+        return requests.find((x:Req) => x.button_id === id);
     } catch (error) {
         console.log(error);
+        return error
     }
 }
 
-const findReqInBdByFileId = (requests: any, id: number | undefined) => {
+const findReqInBdByFileId = (requests: Requests, id: string):Req | undefined => {
     try{
-        return requests.find((x:any) => x.file_id === id && x.copiesNumber === 0);
+        return requests.find((x:Req) => x.file_id === id && x.copiesNumber === 0);
     }catch(error){
         console.log(error);
     }
@@ -153,12 +156,12 @@ const printFile = (filePath: string, copiesNum: number) => {
     const resuslt = shell.printFile(filePath, copiesNum);
 };
 
-const checkUserInPrimaryList = (username: string, userslist: string[]) => {
-    return userslist.some((x:any) => x === username)
+const checkUserInPrimaryList = (username: string, userslist: string[]):boolean => {
+    return userslist.some((x:string) => x === username)
 };
 
 // when user set copies' number
-async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, element:any ,config: any): Promise<unknown> {
+async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, element:NewRequest, config: Config): Promise<boolean> {
     const requests = getRequestsFromBd(config.requests_bd_path);
     const req = findReqInBdByFileId(requests, element.file_id);
 
@@ -172,7 +175,7 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, elemen
         return false
     }
     console.log(req.username + " set the copies' number: " + msg.text);
-    const arr = {
+    const additionalParamsToReq = {
         copiesNumber: Number(msg.text),
         filePath: path,
         button_id: 0
@@ -181,23 +184,23 @@ async function prepearingForPrinting(bot: Tbot, msg: TelegramBot.Message, elemen
     if(checkUserInPrimaryList(req.username, config.primaryUsersList)){  // if user in primaryList he musn't wait for allowation
         console.log(req.username + ' is in primary list');
         await sendAnswer(bot, req, true);
-        printFile(arr.filePath, arr.copiesNumber); // bot can start printing
+        printFile(additionalParamsToReq.filePath, additionalParamsToReq.copiesNumber); // bot can start printing
     }else{
-        const buttonId = await askAdmin(bot, req, config.admin, arr.copiesNumber);
-        if(buttonId){
+        const result = await askAdmin(bot, req, config.admin, additionalParamsToReq.copiesNumber);
+        if(result){
             console.log('admin ' + config.admin.username + ' has been asked');
             await bot.sendTextMessage(req.user_id, 'Запит було надіслано, очікуйте..');
-            arr.button_id = buttonId.message_id; // it helps connect user's file and the button that is sent to the admin
+            additionalParamsToReq.button_id = result.message_id; // it helps connect user's file and the button that is sent to the admin
         }
     }
-    setParamsToBd(requests, req, arr, config.requests_bd_path);
+    setParamsToBd(requests, req, additionalParamsToReq, config.requests_bd_path);
     console.log('prepearingForPrinting: finished');
     return true
 };
 
 
 //  when admin press the button
-async function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: any): Promise<unknown> {
+async function queryProccess(bot: Tbot, msg: TelegramBot.CallbackQuery, config: Config): Promise<boolean> {
     const requests = getRequestsFromBd(config.requests_bd_path);
     const req = findReqInBdByBtnId(requests, msg.message?.message_id);
     if(!req){

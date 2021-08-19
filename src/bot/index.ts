@@ -1,35 +1,39 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { Tbot } from '../types/Tbot';
+import { Config, Tbot, NewRequests, NewRequest} from '../types';
 import server from '../server';
 
-let bd: any[] = []; // this bd for requests that have no copiesNum yet
+
+let newRequests: NewRequests = []; // this bd for requests that have no copiesNum yet
 
 const askCopiesNumber = async (bot: Tbot, id: number | undefined, msgId: number | undefined) => {
-  if((bd[0]) && bd[0].user_id === id && bd[0].message_id === msgId){
+  if((newRequests[0]) && newRequests[0].user_id === id && newRequests[0].message_id === msgId){
     await bot.sendTextMessage(id, 'Скільки зробити копій?', {"reply_to_message_id": msgId});
   }
   return false
 }
 
-async function joinListeners(bot: TelegramBot, customBot: Tbot, config: any){
+async function joinListeners(bot: TelegramBot, customBot: Tbot, config: Config){
     bot.onText(/start/, (msg: TelegramBot.Message) => {
       customBot.sendTextMessage(msg.from?.id, 'Привіт! \nНадішли боту файл(.docs, .pdf, .xlsx, .txt), щоб принтер його роздрукував');
     });
     bot.on('message', async (msg: TelegramBot.Message) => {
       if(msg.document){
-        if(!server.checkValidFile(msg.document, config.file)){
+        if(!server.checkValidFile(msg.document, config.valid_files_conf)){
           console.log('not valid file_type');
+          return false
+        }
+        if(!msg.from){
           return false
         }
         console.log(msg);
         console.log((msg.from?.username || msg.from?.last_name) + ' sent a document');
         await server.writeToBd(msg, config);
-        const req = {
-          "user_id": msg.from?.id,
+        const req:NewRequest = {
+          "user_id": msg.from.id,
           "message_id": msg.message_id,
-          "file_id": msg.document?.file_id
+          "file_id": msg.document.file_id
       };
-        bd.push(req);
+        newRequests.push(req);
         await askCopiesNumber(customBot, msg.from?.id, msg.message_id);
       }
     });
@@ -45,10 +49,10 @@ async function joinListeners(bot: TelegramBot, customBot: Tbot, config: any){
         customBot.sendTextMessage(msg.from?.id, 'Надішліть коректне число')
         return false
       }
-      await server.prepearingForPrinting(customBot, msg, bd[0], config);
-      bd.shift();
-      if(bd[0]){
-        await askCopiesNumber(customBot, msg.from?.id, bd[0].message_id);
+      await server.prepearingForPrinting(customBot, msg, newRequests[0], config);
+      newRequests.shift();
+      if(newRequests[0]){
+        await askCopiesNumber(customBot, msg.from?.id, newRequests[0].message_id);
       }
     });
     return bot;
